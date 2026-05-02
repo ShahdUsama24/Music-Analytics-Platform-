@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Music Listening Behaviour Analysis — PySpark</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --bg:       #0a0b0f;
+  --surface:  #111318;
+  --card:     #161920;
+  --border:   #1f2330;
+  --accent:   #4fffb0;
+  --accent2:  #3d9eff;
+  --accent3:  #ff6b6b;
+  --accent4:  #ffd93d;
+  --text:     #e8eaf0;
+  --muted:    #6b7280;
+  --mono:     'DM Mono', monospace;
+  --serif:    'Fraunces', serif;
+  --sans:     'DM Sans', sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.7;overflow-x:hidden}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border)}
+
+/* ── Noise overlay ── */
+body::before{
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  opacity:.4;
+}
+
+/* ── Grid lines ── */
+body::after{
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);
+  background-size:80px 80px;opacity:.25;
+}
+
+/* ── Nav ── */
+nav{
+  position:fixed;top:0;left:0;right:0;z-index:100;
+  background:rgba(10,11,15,.85);backdrop-filter:blur(16px);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 3rem;height:60px;
+}
+.nav-logo{font-family:var(--mono);font-size:13px;color:var(--accent);letter-spacing:.1em}
+.nav-links{display:flex;gap:2rem}
+.nav-links a{font-size:13px;color:var(--muted);text-decoration:none;letter-spacing:.04em;transition:color .2s}
+.nav-links a:hover{color:var(--text)}
+.nav-badge{font-family:var(--mono);font-size:11px;padding:4px 10px;border:1px solid var(--accent);color:var(--accent);border-radius:4px}
+
+/* ── Main wrapper ── */
+main{position:relative;z-index:1;padding-top:60px}
+
+/* ── Hero ── */
+.hero{
+  min-height:100vh;display:flex;flex-direction:column;justify-content:center;
+  padding:6rem 3rem 4rem;max-width:1200px;margin:0 auto;
+}
+.hero-label{
+  font-family:var(--mono);font-size:12px;color:var(--accent);
+  letter-spacing:.15em;text-transform:uppercase;margin-bottom:1.5rem;
+  display:flex;align-items:center;gap:.75rem;
+}
+.hero-label::before{content:'';width:32px;height:1px;background:var(--accent)}
+.hero-title{
+  font-family:var(--serif);font-size:clamp(3rem,7vw,6rem);font-weight:300;
+  line-height:1.05;letter-spacing:-.02em;margin-bottom:1.5rem;
+}
+.hero-title em{font-style:italic;color:var(--accent)}
+.hero-sub{font-size:17px;color:var(--muted);max-width:580px;line-height:1.8;margin-bottom:3rem}
+.hero-pills{display:flex;flex-wrap:wrap;gap:.75rem;margin-bottom:4rem}
+.pill{
+  font-family:var(--mono);font-size:12px;padding:6px 14px;
+  border:1px solid var(--border);color:var(--muted);border-radius:3px;
+  background:var(--surface);
+}
+.pill.green{border-color:rgba(79,255,176,.3);color:var(--accent);background:rgba(79,255,176,.05)}
+.pill.blue{border-color:rgba(61,158,255,.3);color:var(--accent2);background:rgba(61,158,255,.05)}
+.pill.red{border-color:rgba(255,107,107,.3);color:var(--accent3);background:rgba(255,107,107,.05)}
+.pill.yellow{border-color:rgba(255,217,61,.3);color:var(--accent4);background:rgba(255,217,61,.05)}
+.hero-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1.5rem}
+.stat-card{
+  border:1px solid var(--border);border-radius:8px;padding:1.5rem;
+  background:var(--surface);position:relative;overflow:hidden;
+}
+.stat-card::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,var(--accent),transparent);
+}
+.stat-num{font-family:var(--serif);font-size:2.5rem;font-weight:600;color:var(--accent);line-height:1}
+.stat-label{font-size:12px;color:var(--muted);margin-top:.5rem;font-family:var(--mono)}
+
+/* ── Section wrapper ── */
+.section{max-width:1200px;margin:0 auto;padding:5rem 3rem}
+.section-header{display:flex;align-items:baseline;gap:1.5rem;margin-bottom:3rem}
+.section-num{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:.1em}
+.section-title{font-family:var(--serif);font-size:2.25rem;font-weight:300}
+.section-line{flex:1;height:1px;background:var(--border)}
+
+/* ── Divider ── */
+.divider{height:1px;background:var(--border);max-width:1200px;margin:0 auto}
+
+/* ── Architecture diagram ── */
+.arch-grid{display:grid;grid-template-columns:1fr 48px 1fr 48px 1fr 48px 1fr;gap:0;align-items:center;margin:2rem 0}
+.arch-box{
+  border:1px solid var(--border);border-radius:8px;padding:1.25rem 1rem;
+  background:var(--card);text-align:center;
+}
+.arch-box .ab-icon{font-size:1.5rem;margin-bottom:.5rem}
+.arch-box .ab-title{font-family:var(--mono);font-size:12px;color:var(--text);margin-bottom:.25rem}
+.arch-box .ab-sub{font-size:11px;color:var(--muted)}
+.arch-arrow{text-align:center;color:var(--muted);font-size:18px}
+.arch-box.highlight{border-color:rgba(79,255,176,.4);background:rgba(79,255,176,.04)}
+
+/* ── Tasks grid ── */
+.tasks-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem}
+.task-card{
+  border:1px solid var(--border);border-radius:10px;padding:2rem;
+  background:var(--card);position:relative;overflow:hidden;
+  transition:border-color .2s,transform .2s;cursor:default;
+}
+.task-card:hover{border-color:var(--border);transform:translateY(-2px)}
+.task-card.wide{grid-column:1/-1}
+.task-num{
+  font-family:var(--mono);font-size:11px;color:var(--muted);
+  letter-spacing:.12em;text-transform:uppercase;margin-bottom:1rem;
+}
+.task-title{font-family:var(--serif);font-size:1.5rem;font-weight:300;margin-bottom:.75rem}
+.task-desc{font-size:14px;color:var(--muted);line-height:1.8;margin-bottom:1.5rem}
+.task-tags{display:flex;flex-wrap:wrap;gap:.5rem}
+.tag{font-family:var(--mono);font-size:10px;padding:3px 8px;border-radius:3px}
+.tag-g{background:rgba(79,255,176,.08);color:var(--accent);border:1px solid rgba(79,255,176,.2)}
+.tag-b{background:rgba(61,158,255,.08);color:var(--accent2);border:1px solid rgba(61,158,255,.2)}
+.tag-r{background:rgba(255,107,107,.08);color:var(--accent3);border:1px solid rgba(255,107,107,.2)}
+.tag-y{background:rgba(255,217,61,.08);color:var(--accent4);border:1px solid rgba(255,217,61,.2)}
+.task-accent-line{position:absolute;top:0;left:0;bottom:0;width:3px}
+.task-accent-line.g{background:var(--accent)}
+.task-accent-line.b{background:var(--accent2)}
+.task-accent-line.r{background:var(--accent3)}
+.task-accent-line.y{background:var(--accent4)}
+
+/* ── Code block ── */
+.code-wrap{margin:1.5rem 0}
+.code-header{
+  display:flex;align-items:center;justify-content:space-between;
+  background:var(--card);border:1px solid var(--border);
+  border-bottom:none;border-radius:8px 8px 0 0;padding:.6rem 1rem;
+}
+.code-lang{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:.08em}
+.code-dots{display:flex;gap:6px}
+.code-dot{width:10px;height:10px;border-radius:50%}
+.code-dot:nth-child(1){background:#ff5f57}
+.code-dot:nth-child(2){background:#febc2e}
+.code-dot:nth-child(3){background:#28c840}
+pre.code{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:0 0 8px 8px;padding:1.5rem;
+  font-family:var(--mono);font-size:12.5px;line-height:1.8;
+  overflow-x:auto;color:#cdd6f4;
+}
+.kw{color:#cba6f7}  /* keywords */
+.fn{color:#89b4fa}  /* functions */
+.st{color:#a6e3a1}  /* strings */
+.cm{color:#585b70}  /* comments */
+.nm{color:#fab387}  /* numbers/names */
+
+/* ── Query showcase ── */
+.query-list{display:flex;flex-direction:column;gap:1rem}
+.query-item{
+  display:grid;grid-template-columns:40px 1fr auto;align-items:center;gap:1.5rem;
+  border:1px solid var(--border);border-radius:8px;padding:1.25rem 1.5rem;
+  background:var(--card);transition:border-color .2s;
+}
+.query-item:hover{border-color:rgba(79,255,176,.3)}
+.query-item-num{
+  font-family:var(--mono);font-size:22px;color:var(--border);font-weight:500;
+}
+.query-item-title{font-size:14px;font-weight:500;margin-bottom:.25rem}
+.query-item-desc{font-size:13px;color:var(--muted)}
+.query-badge{font-family:var(--mono);font-size:10px;padding:4px 10px;border-radius:20px;white-space:nowrap}
+
+/* ── Charts section ── */
+.charts-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem}
+.chart-card{border:1px solid var(--border);border-radius:10px;padding:1.75rem;background:var(--card)}
+.chart-card.wide{grid-column:1/-1}
+.chart-title{font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:.08em;margin-bottom:1.25rem}
+.bar-chart{display:flex;flex-direction:column;gap:.6rem}
+.bar-row{display:flex;align-items:center;gap:.75rem}
+.bar-label{font-family:var(--mono);font-size:11px;color:var(--muted);width:110px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar-track{flex:1;height:22px;background:rgba(255,255,255,.04);border-radius:3px;overflow:hidden;position:relative}
+.bar-fill{height:100%;border-radius:3px;position:relative;display:flex;align-items:center;justify-content:flex-end;padding-right:8px}
+.bar-val{font-family:var(--mono);font-size:10px;color:rgba(0,0,0,.7);font-weight:500}
+.pie-wrap{display:flex;gap:2rem;align-items:center}
+.pie-legend{display:flex;flex-direction:column;gap:.6rem;flex:1}
+.legend-item{display:flex;align-items:center;gap:.6rem;font-family:var(--mono);font-size:11px}
+.legend-dot{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+.legend-name{color:var(--text);flex:1}
+.legend-pct{color:var(--muted)}
+
+/* ── Tech stack ── */
+.stack-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem}
+.stack-card{
+  border:1px solid var(--border);border-radius:8px;padding:1.5rem 1.25rem;
+  background:var(--card);text-align:center;transition:border-color .2s;
+}
+.stack-card:hover{border-color:rgba(79,255,176,.3)}
+.stack-icon{font-size:2rem;margin-bottom:.75rem}
+.stack-name{font-family:var(--mono);font-size:13px;color:var(--text);margin-bottom:.25rem}
+.stack-role{font-size:12px;color:var(--muted)}
+
+/* ── Use cases ── */
+.use-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem}
+.use-card{
+  border:1px solid var(--border);border-radius:8px;padding:1.5rem;
+  background:var(--card);
+}
+.use-icon{font-size:1.5rem;margin-bottom:.75rem}
+.use-title{font-size:14px;font-weight:500;margin-bottom:.5rem}
+.use-desc{font-size:13px;color:var(--muted);line-height:1.7}
+
+/* ── Footer ── */
+footer{
+  border-top:1px solid var(--border);padding:3rem;
+  text-align:center;font-family:var(--mono);font-size:12px;color:var(--muted);
+}
+footer span{color:var(--accent)}
+
+/* ── Animations ── */
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.hero-label{animation:fadeUp .6s ease both}
+.hero-title{animation:fadeUp .6s .1s ease both}
+.hero-sub{animation:fadeUp .6s .2s ease both}
+.hero-pills{animation:fadeUp .6s .3s ease both}
+.hero-stats{animation:fadeUp .6s .4s ease both}
+
+@media(max-width:900px){
+  nav{padding:0 1.5rem}
+  .hero,.section{padding-left:1.5rem;padding-right:1.5rem}
+  .hero-stats,.tasks-grid,.charts-grid,.stack-grid,.use-grid,.arch-grid{grid-template-columns:1fr 1fr}
+  .task-card.wide{grid-column:auto}
+  .arch-arrow,.arch-box:nth-child(4),.arch-box:nth-child(6){display:none}
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">◈ MUSIC_ANALYTICS</div>
+  <div class="nav-links">
+    <a href="#overview">Overview</a>
+    <a href="#architecture">Pipeline</a>
+    <a href="#tasks">Tasks</a>
+    <a href="#queries">Queries</a>
+    <a href="#visualizations">Charts</a>
+    <a href="#stack">Stack</a>
+  </div>
+  <div class="nav-badge">v1.0.0</div>
+</nav>
+
+<main>
+
+<!-- ══ HERO ══════════════════════════════════════════════════════════════════ -->
+<section class="hero" id="overview">
+  <div class="hero-label">Data Engineering · University Portfolio Project</div>
+  <h1 class="hero-title">
+    Music Listening<br>
+    <em>Behaviour</em> Analysis<br>
+    at Scale
+  </h1>
+  <p class="hero-sub">
+    A production-grade data pipeline built with Apache PySpark to extract actionable insights from large-scale music streaming interactions — from raw CSV ingestion to genre intelligence and trend analysis.
+  </p>
+  <div class="hero-pills">
+    <span class="pill green">Apache PySpark 3.x</span>
+    <span class="pill blue">Python 3.10+</span>
+    <span class="pill red">Matplotlib</span>
+    <span class="pill yellow">Distributed Computing</span>
+    <span class="pill">listening.csv</span>
+    <span class="pill">genre.csv</span>
+  </div>
+  <div class="hero-stats">
+    <div class="stat-card">
+      <div class="stat-num">2</div>
+      <div class="stat-label">// DATASETS</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num">9</div>
+      <div class="stat-label">// QUERIES</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num">4</div>
+      <div class="stat-label">// VISUALIZATIONS</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num">5</div>
+      <div class="stat-label">// PIPELINE STAGES</div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ══ ARCHITECTURE ══════════════════════════════════════════════════════════ -->
+<section class="section" id="architecture">
+  <div class="section-header">
+    <span class="section-num">01 // PIPELINE</span>
+    <h2 class="section-title">Data Architecture</h2>
+    <div class="section-line"></div>
+  </div>
+  <div class="arch-grid">
+    <div class="arch-box">
+      <div class="ab-icon">📂</div>
+      <div class="ab-title">Raw CSV Sources</div>
+      <div class="ab-sub">listening.csv · genre.csv</div>
+    </div>
+    <div class="arch-arrow">→</div>
+    <div class="arch-box highlight">
+      <div class="ab-icon">🧹</div>
+      <div class="ab-title">Ingest & Clean</div>
+      <div class="ab-sub">Null drop · Type cast · Dedup</div>
+    </div>
+    <div class="arch-arrow">→</div>
+    <div class="arch-box highlight">
+      <div class="ab-icon">🔗</div>
+      <div class="ab-title">Transform & Join</div>
+      <div class="ab-sub">Left join · Window fns · Agg</div>
+    </div>
+    <div class="arch-arrow">→</div>
+    <div class="arch-box">
+      <div class="ab-icon">📊</div>
+      <div class="ab-title">Visualize</div>
+      <div class="ab-sub">Matplotlib · PNG export</div>
+    </div>
+  </div>
+
+  <div style="margin-top:2.5rem">
+  <div class="code-wrap">
+    <div class="code-header">
+      <div class="code-dots"><div class="code-dot"></div><div class="code-dot"></div><div class="code-dot"></div></div>
+      <span class="code-lang">PYTHON · PYSPARK</span>
+    </div>
+    <pre class="code"><span class="cm"># ── SparkSession Bootstrap ──────────────────────────────────────</span>
+<span class="kw">from</span> pyspark.sql <span class="kw">import</span> SparkSession
+<span class="kw">from</span> pyspark.sql <span class="kw">import</span> functions <span class="kw">as</span> F
+<span class="kw">from</span> pyspark.sql.window <span class="kw">import</span> Window
+
+spark = (SparkSession.builder
+         .<span class="fn">appName</span>(<span class="st">"MusicListeningAnalysis"</span>)
+         .<span class="fn">master</span>(<span class="st">"local[4]"</span>)      <span class="cm"># 4 parallel CPU threads</span>
+         .<span class="fn">getOrCreate</span>())
+
+spark.sparkContext.<span class="fn">setLogLevel</span>(<span class="st">"WARN"</span>)
+<span class="fn">print</span>(f<span class="st">"✓ Spark {spark.version} ready"</span>)</pre>
+  </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ══ TASKS ════════════════════════════════════════════════════════════════ -->
+<section class="section" id="tasks">
+  <div class="section-header">
+    <span class="section-num">02 // TASKS</span>
+    <h2 class="section-title">Five-Stage Pipeline</h2>
+    <div class="section-line"></div>
+  </div>
+  <div class="tasks-grid">
+    <div class="task-card">
+      <div class="task-accent-line g"></div>
+      <div class="task-num">TASK 01 // INTRODUCTION</div>
+      <h3 class="task-title">Project Foundation</h3>
+      <p class="task-desc">Define objectives, describe datasets, list technologies, and outline the insights we extract — framed for an academic or portfolio audience.</p>
+      <div class="task-tags">
+        <span class="tag tag-g">listening.csv</span>
+        <span class="tag tag-g">genre.csv</span>
+        <span class="tag tag-g">Objective Setting</span>
+      </div>
+    </div>
+    <div class="task-card">
+      <div class="task-accent-line b"></div>
+      <div class="task-num">TASK 02 // INGEST & CLEAN</div>
+      <h3 class="task-title">Data Engineering</h3>
+      <p class="task-desc">Initialize SparkSession, load CSVs with schema inference, audit nulls, cast types, deduplicate rows, trim strings, and cache the result in memory.</p>
+      <div class="task-tags">
+        <span class="tag tag-b">SparkSession</span>
+        <span class="tag tag-b">dropna()</span>
+        <span class="tag tag-b">cache()</span>
+        <span class="tag tag-b">Type Casting</span>
+      </div>
+    </div>
+    <div class="task-card">
+      <div class="task-accent-line r"></div>
+      <div class="task-num">TASK 03 // ANALYSIS</div>
+      <h3 class="task-title">Queries: Basic → Advanced</h3>
+      <p class="task-desc">Nine progressively complex queries: counts, filters, groupBy aggregations, top-N rankings, replay-rate analysis, monthly time-series, and Window functions for per-artist rankings.</p>
+      <div class="task-tags">
+        <span class="tag tag-r">groupBy</span>
+        <span class="tag tag-r">Window</span>
+        <span class="tag tag-r">orderBy</span>
+        <span class="tag tag-r">rank()</span>
+      </div>
+    </div>
+    <div class="task-card">
+      <div class="task-accent-line y"></div>
+      <div class="task-num">TASK 04 // JOIN & GENRE</div>
+      <h3 class="task-title">Multi-Dataset Fusion</h3>
+      <p class="task-desc">Load genre.csv, perform a left join preserving all listening rows, fill nulls with "Unknown", then run genre popularity, share percentage, user top-genre, and top-artist-per-genre queries.</p>
+      <div class="task-tags">
+        <span class="tag tag-y">LEFT JOIN</span>
+        <span class="tag tag-y">coalesce()</span>
+        <span class="tag tag-y">Genre Intelligence</span>
+      </div>
+    </div>
+    <div class="task-card wide">
+      <div class="task-accent-line g"></div>
+      <div class="task-num">TASK 05 // VISUALIZATION</div>
+      <h3 class="task-title">Matplotlib Charts & Insights</h3>
+      <p class="task-desc">Convert aggregated Spark DataFrames to Pandas (never raw data), then produce four publication-quality charts: horizontal bar for top songs, pie+bar combo for genre distribution, filled line for monthly trend, and a multi-color bar for top users. All saved as 150 DPI PNGs.</p>
+      <div class="task-tags">
+        <span class="tag tag-g">toPandas()</span>
+        <span class="tag tag-g">Horizontal Bar</span>
+        <span class="tag tag-g">Pie Chart</span>
+        <span class="tag tag-g">Line Chart</span>
+        <span class="tag tag-g">PNG Export</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ══ QUERIES ══════════════════════════════════════════════════════════════ -->
+<section class="section" id="queries">
+  <div class="section-header">
+    <span class="section-num">03 // QUERIES</span>
+    <h2 class="section-title">Analysis Queries</h2>
+    <div class="section-line"></div>
+  </div>
+  <div class="query-list">
+    <div class="query-item">
+      <div class="query-item-num">01</div>
+      <div>
+        <div class="query-item-title">Dataset Summary Statistics</div>
+        <div class="query-item-desc">Total records, unique users, and unique songs — baseline sanity check</div>
+      </div>
+      <span class="query-badge tag-g tag">BASIC</span>
+    </div>
+    <div class="query-item">
+      <div class="query-item-num">02</div>
+      <div>
+        <div class="query-item-title">Artist Filter (Case-Insensitive)</div>
+        <div class="query-item-desc">Filter rows by artist name using F.lower().contains() for robust partial matching</div>
+      </div>
+      <span class="query-badge tag-g tag">BASIC</span>
+    </div>
+    <div class="query-item">
+      <div class="query-item-num">03</div>
+      <div>
+        <div class="query-item-title">Play-Count Threshold Filter</div>
+        <div class="query-item-desc">Isolate heavy-replay events where play_count exceeds a configurable threshold</div>
+      </div>
+      <span class="query-badge tag-g tag">BASIC</span>
+    </div>
+    <div class="query-item">
+      <div class="query-item-num">04</div>
+      <div>
+        <div class="query-item-title">Top 10 Global Songs</div>
+        <div class="query-item-desc">groupBy song → sum(play_count) → orderBy desc — the classic top-N leaderboard</div>
+      </div>
+      <span class="query-badge tag-b tag">INTERMEDIATE</span>
+    </div>
+    <div class="query-item">
+      <div class="query-item-num">05</div>
+      <div>
+        <div class="query-item-title">Most Active Listeners</div>
+        <div class="query-item-desc">Dual aggregation: total plays + distinct songs per user to measure volume and diversity</div>
+      </div>
+      <span class="query-badge tag-b tag">INTERMEDIATE</span>
+    </div>
+    <div class="query-item">
+      <div class="query-item-num">06</div>
+      <div>
+        <div class="query-item-title">Average Replay Rate per User</div>
+        <div class="query-item-desc">avg(play_count) per user reveals which listeners obsessively repeat tracks</div>
+      </div>
+      <span class="query-badge tag-b tag">INTERMEDIATE</span>
+    </div>
+    <div class="query-item">
+      <div class="query-item-num">07</div>
+      <div>
+        <div class="query-item-title">Top Artists by Total Plays</div>
+        <div class="query-item-desc">Artist-level leaderboard combining total plays and song count in dataset</div>
+      </div>
+      <span class="query-badge tag-b tag">INTERMEDIATE</span>
+    </div>
+    <div class="query-item">
+      <div class="query-item-num">08</div>
+      <div>
+        <div class="query-item-title">Monthly Listening Trend</div>
+        <div class="query-item-desc">date_format → groupBy year_month → time series of total plays, ready for charting</div>
+      </div>
+      <span class="query-badge tag-r tag">ADVANCED</span>
+    </div>
+    <div class="query-item">
+      <div class="query-item-num">09</div>
+      <div>
+        <div class="query-item-title">#1 Song per Artist (Window Function)</div>
+        <div class="query-item-desc">Window.partitionBy("artist").orderBy(desc) + rank() — SQL window pattern in PySpark</div>
+      </div>
+      <span class="query-badge tag-r tag">ADVANCED</span>
+    </div>
+  </div>
+
+  <div style="margin-top:2.5rem">
+  <div class="code-wrap">
+    <div class="code-header">
+      <div class="code-dots"><div class="code-dot"></div><div class="code-dot"></div><div class="code-dot"></div></div>
+      <span class="code-lang">ADVANCED · WINDOW FUNCTION</span>
+    </div>
+    <pre class="code"><span class="cm"># ── Query 9: Rank songs within each artist ──────────────────────</span>
+<span class="kw">from</span> pyspark.sql.window <span class="kw">import</span> Window
+
+artist_window = (Window
+    .<span class="fn">partitionBy</span>(<span class="st">"artist"</span>)          <span class="cm"># reset rank per artist</span>
+    .<span class="fn">orderBy</span>(F.<span class="fn">desc</span>(<span class="st">"total_plays"</span>))) <span class="cm"># highest plays = rank 1</span>
+
+ranked = (clean_df
+    .<span class="fn">groupBy</span>(<span class="st">"artist"</span>, <span class="st">"song_name"</span>)
+    .<span class="fn">agg</span>(F.<span class="fn">sum</span>(<span class="st">"play_count"</span>).<span class="fn">alias</span>(<span class="st">"total_plays"</span>))
+    .<span class="fn">withColumn</span>(<span class="st">"rank_in_artist"</span>, F.<span class="fn">rank</span>().<span class="fn">over</span>(artist_window))
+    .<span class="fn">filter</span>(F.<span class="fn">col</span>(<span class="st">"rank_in_artist"</span>) == <span class="nm">1</span>)   <span class="cm"># keep only #1 per artist</span>
+    .<span class="fn">orderBy</span>(F.<span class="fn">desc</span>(<span class="st">"total_plays"</span>))
+    .<span class="fn">limit</span>(<span class="nm">10</span>))
+
+ranked.<span class="fn">show</span>(truncate=<span class="kw">False</span>)</pre>
+  </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ══ VISUALIZATIONS ════════════════════════════════════════════════════════ -->
+<section class="section" id="visualizations">
+  <div class="section-header">
+    <span class="section-num">04 // CHARTS</span>
+    <h2 class="section-title">Data Visualizations</h2>
+    <div class="section-line"></div>
+  </div>
+  <div class="charts-grid">
+
+    <!-- Top Songs Bar Chart -->
+    <div class="chart-card">
+      <div class="chart-title">// VIZ 01 · TOP 10 SONGS BY TOTAL PLAYS</div>
+      <div class="bar-chart" id="songs-chart"></div>
+    </div>
+
+    <!-- Genre Pie -->
+    <div class="chart-card">
+      <div class="chart-title">// VIZ 02 · GENRE DISTRIBUTION (%)</div>
+      <div class="pie-wrap">
+        <svg id="pie-svg" viewBox="0 0 180 180" width="180" height="180" style="flex-shrink:0"></svg>
+        <div class="pie-legend" id="pie-legend"></div>
+      </div>
+    </div>
+
+    <!-- Monthly Trend -->
+    <div class="chart-card wide">
+      <div class="chart-title">// VIZ 03 · MONTHLY LISTENING TREND</div>
+      <svg id="trend-svg" viewBox="0 0 860 180" width="100%" height="180"></svg>
+    </div>
+
+    <!-- Top Users -->
+    <div class="chart-card wide">
+      <div class="chart-title">// VIZ 04 · TOP 10 MOST ACTIVE USERS</div>
+      <div class="bar-chart" id="users-chart"></div>
+    </div>
+
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ══ TECH STACK ════════════════════════════════════════════════════════════ -->
+<section class="section" id="stack">
+  <div class="section-header">
+    <span class="section-num">05 // STACK</span>
+    <h2 class="section-title">Technologies</h2>
+    <div class="section-line"></div>
+  </div>
+  <div class="stack-grid">
+    <div class="stack-card">
+      <div class="stack-icon">⚡</div>
+      <div class="stack-name">Apache PySpark 3.x</div>
+      <div class="stack-role">Distributed processing engine, DataFrame API, Window functions, MLlib-ready</div>
+    </div>
+    <div class="stack-card">
+      <div class="stack-icon">🐍</div>
+      <div class="stack-name">Python 3.10+</div>
+      <div class="stack-role">Orchestration language, f-strings, type hints, clean OOP patterns</div>
+    </div>
+    <div class="stack-card">
+      <div class="stack-icon">📈</div>
+      <div class="stack-name">Matplotlib</div>
+      <div class="stack-role">Chart rendering — bar, pie, line, horizontal bar — with seaborn grid styling</div>
+    </div>
+    <div class="stack-card">
+      <div class="stack-icon">🐼</div>
+      <div class="stack-name">Pandas</div>
+      <div class="stack-role">Post-aggregation bridge: toPandas() only on small, pre-reduced DataFrames</div>
+    </div>
+  </div>
+
+  <div style="margin-top:3rem">
+  <div class="section-header">
+    <span class="section-num">06 // FUTURE</span>
+    <h2 class="section-title">Real-World Extensions</h2>
+    <div class="section-line"></div>
+  </div>
+  <div class="use-grid">
+    <div class="use-card">
+      <div class="use-icon">🗃️</div>
+      <div class="use-title">Delta Lake / Parquet</div>
+      <div class="use-desc">Replace CSV with columnar Delta Lake format for 10–100× faster reads, ACID transactions, and time-travel queries.</div>
+    </div>
+    <div class="use-card">
+      <div class="use-icon">🤖</div>
+      <div class="use-title">Recommendation Engine</div>
+      <div class="use-desc">Pipe user→genre mappings into PySpark MLlib's ALS collaborative filtering model for personalised song recommendations.</div>
+    </div>
+    <div class="use-card">
+      <div class="use-icon">🌊</div>
+      <div class="use-title">Structured Streaming</div>
+      <div class="use-desc">Swap batch CSV for Kafka + Spark Structured Streaming to build a real-time listening dashboard with sub-second latency.</div>
+    </div>
+    <div class="use-card">
+      <div class="use-icon">✅</div>
+      <div class="use-title">Data Quality (Deequ)</div>
+      <div class="use-desc">Integrate Amazon Deequ or Great Expectations for automated constraint checks on every pipeline run.</div>
+    </div>
+    <div class="use-card">
+      <div class="use-icon">☁️</div>
+      <div class="use-title">Cloud Deployment</div>
+      <div class="use-desc">Deploy on AWS EMR, Google Dataproc, or Azure HDInsight to process billions of streaming events cost-efficiently.</div>
+    </div>
+    <div class="use-card">
+      <div class="use-icon">📐</div>
+      <div class="use-title">Schema Enforcement</div>
+      <div class="use-desc">Replace inferSchema with explicit StructType definitions to prevent silent type drift and downstream pipeline failures.</div>
+    </div>
+  </div>
+  </div>
+</section>
+
+<footer>
+  Built with <span>Apache PySpark</span> · <span>Python</span> · <span>Matplotlib</span>
+  &nbsp;·&nbsp; Data Engineering Portfolio Project &nbsp;·&nbsp; 2024
+</footer>
+
+</main>
+
+<script>
+// ── Song bar chart ────────────────────────────────────────────────────────────
+const songs = [
+  {name:"Blinding Lights",artist:"The Weeknd",plays:982450},
+  {name:"Shape of You",artist:"Ed Sheeran",plays:871200},
+  {name:"Dance Monkey",artist:"Tones and I",plays:812300},
+  {name:"Watermelon Sugar",artist:"Harry Styles",plays:756800},
+  {name:"Bad Guy",artist:"Billie Eilish",plays:698400},
+  {name:"Levitating",artist:"Dua Lipa",plays:671000},
+  {name:"Stay",artist:"The Kid LAROI",plays:643200},
+  {name:"drivers license",artist:"Olivia Rodrigo",plays:608900},
+  {name:"good 4 u",artist:"Olivia Rodrigo",plays:589300},
+  {name:"Peaches",artist:"Justin Bieber",plays:561000},
+];
+const maxPlays = songs[0].plays;
+const colors = ["#4fffb0","#3d9eff","#ff6b6b","#ffd93d","#c084fc","#fb923c","#34d399","#60a5fa","#f472b6","#a3e635"];
+const songChart = document.getElementById('songs-chart');
+songs.forEach((s,i)=>{
+  const pct = (s.plays/maxPlays*100).toFixed(1);
+  const row = document.createElement('div');
+  row.className='bar-row';
+  row.innerHTML=`
+    <div class="bar-label" title="${s.name} — ${s.artist}">${s.name.substring(0,16)}</div>
+    <div class="bar-track">
+      <div class="bar-fill" style="width:${pct}%;background:${colors[i]}">
+        <span class="bar-val">${(s.plays/1000).toFixed(0)}K</span>
+      </div>
+    </div>`;
+  songChart.appendChild(row);
+});
+
+// ── Pie chart ────────────────────────────────────────────────────────────────
+const genres = [
+  {name:"Pop",pct:28.5,color:"#4fffb0"},
+  {name:"Rock",pct:22.3,color:"#3d9eff"},
+  {name:"Electronic",pct:18.1,color:"#ff6b6b"},
+  {name:"Hip-Hop",pct:14.2,color:"#ffd93d"},
+  {name:"Jazz",pct:7.5,color:"#c084fc"},
+  {name:"R&B",pct:5.8,color:"#fb923c"},
+  {name:"Other",pct:3.6,color:"#6b7280"},
+];
+const pie = document.getElementById('pie-svg');
+const legend = document.getElementById('pie-legend');
+let cumulative = 0;
+const cx=90,cy=90,r=72,inner=38;
+genres.forEach(g=>{
+  const start=cumulative/100*Math.PI*2 - Math.PI/2;
+  const end=(cumulative+g.pct)/100*Math.PI*2 - Math.PI/2;
+  const x1=cx+r*Math.cos(start),y1=cy+r*Math.sin(start);
+  const x2=cx+r*Math.cos(end),y2=cy+r*Math.sin(end);
+  const xi1=cx+inner*Math.cos(start),yi1=cy+inner*Math.sin(start);
+  const xi2=cx+inner*Math.cos(end),yi2=cy+inner*Math.sin(end);
+  const large=g.pct>50?1:0;
+  const path=document.createElementNS('http://www.w3.org/2000/svg','path');
+  path.setAttribute('d',`M${xi1},${yi1} L${x1},${y1} A${r},${r} 0 ${large} 1 ${x2},${y2} L${xi2},${yi2} A${inner},${inner} 0 ${large} 0 ${xi1},${yi1} Z`);
+  path.setAttribute('fill',g.color);
+  path.setAttribute('opacity','0.9');
+  pie.appendChild(path);
+  cumulative+=g.pct;
+  const li=document.createElement('div');
+  li.className='legend-item';
+  li.innerHTML=`<div class="legend-dot" style="background:${g.color}"></div><span class="legend-name">${g.name}</span><span class="legend-pct">${g.pct}%</span>`;
+  legend.appendChild(li);
+});
+
+// ── Monthly trend sparkline ──────────────────────────────────────────────────
+const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const plays =  [420,385,510,475,620,710,780,840,795,880,920,1050];
+const svg = document.getElementById('trend-svg');
+const W=860,H=180,PAD={t:20,b:35,l:40,r:20};
+const cw=W-PAD.l-PAD.r,ch=H-PAD.t-PAD.b;
+const minP=Math.min(...plays),maxP=Math.max(...plays);
+const scaleX=i=>PAD.l+i/(months.length-1)*cw;
+const scaleY=v=>PAD.t+ch-(v-minP)/(maxP-minP)*ch;
+const pts=plays.map((p,i)=>`${scaleX(i).toFixed(1)},${scaleY(p).toFixed(1)}`).join(' ');
+const areaBase=`${scaleX(0)},${(PAD.t+ch).toFixed(1)} ${pts} ${scaleX(months.length-1)},${(PAD.t+ch).toFixed(1)}`;
+const ns='http://www.w3.org/2000/svg';
+// Grid lines
+for(let i=0;i<=4;i++){
+  const y=PAD.t+ch/4*i;
+  const line=document.createElementNS(ns,'line');
+  line.setAttribute('x1',PAD.l);line.setAttribute('x2',W-PAD.r);
+  line.setAttribute('y1',y);line.setAttribute('y2',y);
+  line.setAttribute('stroke','#1f2330');line.setAttribute('stroke-width','1');
+  svg.appendChild(line);
+}
+// Area
+const area=document.createElementNS(ns,'polygon');
+area.setAttribute('points',areaBase);
+area.setAttribute('fill','rgba(79,255,176,0.07)');
+svg.appendChild(area);
+// Line
+const polyline=document.createElementNS(ns,'polyline');
+polyline.setAttribute('points',pts);
+polyline.setAttribute('fill','none');
+polyline.setAttribute('stroke','#4fffb0');
+polyline.setAttribute('stroke-width','2');
+polyline.setAttribute('stroke-linejoin','round');
+svg.appendChild(polyline);
+// Dots + labels
+plays.forEach((p,i)=>{
+  const cx2=scaleX(i),cy2=scaleY(p);
+  const c=document.createElementNS(ns,'circle');
+  c.setAttribute('cx',cx2);c.setAttribute('cy',cy2);c.setAttribute('r','4');
+  c.setAttribute('fill','#4fffb0');c.setAttribute('stroke','#0a0b0f');c.setAttribute('stroke-width','2');
+  svg.appendChild(c);
+  const t=document.createElementNS(ns,'text');
+  t.setAttribute('x',cx2);t.setAttribute('y',H-8);
+  t.setAttribute('text-anchor','middle');t.setAttribute('fill','#6b7280');
+  t.setAttribute('font-size','10');t.setAttribute('font-family','DM Mono, monospace');
+  t.textContent=months[i];
+  svg.appendChild(t);
+});
+
+// ── Users bar chart ───────────────────────────────────────────────────────────
+const users = [
+  {id:"usr_8841",plays:24500},{id:"usr_2293",plays:21300},
+  {id:"usr_5571",plays:19800},{id:"usr_3302",plays:18200},
+  {id:"usr_7784",plays:16900},{id:"usr_1198",plays:15600},
+  {id:"usr_4412",plays:14100},{id:"usr_9923",plays:13400},
+  {id:"usr_6654",plays:12800},{id:"usr_0071",plays:11500},
+];
+const maxU=users[0].plays;
+const usersChart=document.getElementById('users-chart');
+users.forEach((u,i)=>{
+  const pct=(u.plays/maxU*100).toFixed(1);
+  const row=document.createElement('div');
+  row.className='bar-row';
+  row.innerHTML=`
+    <div class="bar-label">${u.id}</div>
+    <div class="bar-track">
+      <div class="bar-fill" style="width:${pct}%;background:${colors[i]}">
+        <span class="bar-val">${(u.plays/1000).toFixed(1)}K</span>
+      </div>
+    </div>`;
+  usersChart.appendChild(row);
+});
+</script>
+</body>
+</html>

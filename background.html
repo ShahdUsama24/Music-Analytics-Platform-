@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<style>
+body {
+    margin: 0;
+    background: #0e1117;
+}
+
+/* Grid background */
+.grid {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+
+    background-image:
+        linear-gradient(rgba(48,54,61,0.4) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(48,54,61,0.4) 1px, transparent 1px);
+
+    background-size: 80px 80px;
+    opacity: 0.2;
+}
+
+/* Optional subtle noise */
+.noise {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0.05;
+    background-image: url("https://www.transparenttextures.com/patterns/noise.png");
+}
+</style>
+</head>
+
+<body>
+<div class="grid"></div>
+<div class="noise"></div>
+</body>
+</html>
