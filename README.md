@@ -40,16 +40,16 @@ This project answers:
 
 ---
 
-## ✨ Features
+##  Features
 
-### ⚙️ Data Engineering (PySpark)
+###  Data Engineering (PySpark)
 - Null handling & schema enforcement
 - Data deduplication
 - Aggregations (top songs, users, trends)
 - Window functions (ranking songs per artist)
 - Genre enrichment using joins
 
-### 📊 Dashboard (Streamlit + Plotly)
+###  Dashboard (Streamlit + Plotly)
 - KPI metrics (Total Plays, Songs, Artists)
 - Interactive filters (artist, color theme)
 - Dynamic visualizations:
@@ -59,7 +59,7 @@ This project answers:
 
 ---
 
-## 🛠️ Tech Stack
+##  Tech Stack
 
 | Layer | Tools |
 |------|------|
@@ -71,7 +71,7 @@ This project answers:
 
 ---
 
-## 📂 Dataset
+##  Dataset
 
 The dataset simulates music streaming behavior:
 - User IDs
@@ -83,7 +83,7 @@ The dataset simulates music streaming behavior:
 
 ---
 
-## 🔄 Data Pipeline Steps
+##  Data Pipeline Steps
 
 1. **Data Loading**
    - Load raw dataset into PySpark DataFrame
@@ -130,6 +130,13 @@ The Streamlit dashboard includes:
   - Top Songs (Bar Chart)
   - Genre Distribution (Pie/Donut)
   - Listening Trends (Line Chart)
+
+<img width="1860" height="620" alt="Screenshot 2026-05-02 135724" src="https://github.com/user-attachments/assets/85dbd2f1-458b-440e-9d58-e3cd5cf85f50" />
+<img width="1860" height="620" alt="Screenshot 2026-05-02 135744" src="https://github.com/user-attachments/assets/1d3df5d6-d8f4-4027-97db-74163c997df2" />
+<img width="1860" height="620" alt="Screenshot 2026-05-02 135807" src="https://github.com/user-attachments/assets/3cd9c868-d928-41d0-bd54-d86887d27cc9" />
+
+
+
 
 ---
 
